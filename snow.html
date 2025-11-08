@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNOW.js - Whitespace Steganography</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-button.active {
+            border-color: #3b82f6;
+            color: #3b82f6;
+            font-weight: 600;
+        }
+        /* Custom file input */
+        input[type="file"]::file-selector-button {
+            @apply px-4 py-2 bg-gray-100 text-gray-700 font-medium text-sm rounded-lg border border-gray-300 hover:bg-gray-200 cursor-pointer transition-colors;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto bg-white shadow-lg rounded-2xl p-6 md:p-8 border border-gray-200">
+        
+        <!-- Header -->
+        <div class="text-center mb-6 pb-6 border-b border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-800">SNOW.js</h1>
+            <p class="text-gray-600 mt-2">A web-based implementation of the SNOW whitespace steganography program.</p>
+        </div>
+
+        <!-- Tab Buttons -->
+        <div class="flex border-b border-gray-200 mb-6">
+            <button id="tab-conceal" class="tab-button active py-3 px-6 border-b-2 border-transparent text-gray-600 hover:text-gray-800 transition-colors" onclick="showTab('conceal')">Conceal</button>
+            <button id="tab-extract" class="tab-button py-3 px-6 border-b-2 border-transparent text-gray-600 hover:text-gray-800 transition-colors" onclick="showTab('extract')">Extract</button>
+            <button id="tab-calculate" class="tab-button py-3 px-6 border-b-2 border-transparent text-gray-600 hover:text-gray-800 transition-colors" onclick="showTab('calculate')">Calculate Space</button>
+        </div>
+
+        <!-- Tab Content -->
+        <div id="content-conceal" class="tab-content active">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Left Column: Inputs -->
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">1. Cover Text File</label>
+                        <input id="conceal-cover-file" type="file" class="w-full text-sm text-gray-500 file:mr-4">
+                        <p class="text-xs text-gray-500 mt-1">The text file to hide the message in.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">2. Message to Hide</label>
+                        <select id="conceal-message-source" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                            <option value="text">Text Input</option>
+                            <option value="file">File Input</option>
+                        </select>
+                    </div>
+
+                    <div id="conceal-text-input-group">
+                        <textarea id="conceal-message-text" rows="4" class="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="Enter your secret message here..."></textarea>
+                    </div>
+
+                    <div id="conceal-file-input-group" style="display: none;">
+                        <input id="conceal-message-file" type="file" class="w-full text-sm text-gray-500 file:mr-4">
+                    </div>
+                </div>
+                
+                <!-- Right Column: Options & Action -->
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">3. Options</label>
+                        <div class="space-y-3">
+                            <div>
+                                <label for="conceal-password" class="block text-sm text-gray-800">Password (optional)</label>
+                                <input id="conceal-password" type="password" class="w-full p-2 mt-1 border border-gray-300 rounded-lg text-sm" placeholder="Enter password for encryption">
+                            </div>
+                            <div class="flex items-center">
+                                <input id="conceal-compress" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                                <label for="conceal-compress" class="ml-2 block text-sm text-gray-800">Use Compression (-C)</label>
+                            </div>
+                            <div>
+                                <label for="conceal-line-length" class="block text-sm text-gray-800">Max Line Length (-l)</label>
+                                <input id="conceal-line-length" type="number" value="80" min="8" class="w-24 p-2 mt-1 border border-gray-300 rounded-lg text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-gray-200 pt-6">
+                        <button id="conceal-button" class="w-full bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                            Conceal Message
+                        </button>
+                        <a id="conceal-download" class="hidden w-full bg-green-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-green-700 transition-colors text-center mt-4">
+                            Download Result
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="conceal-status" class="mt-6 text-sm text-gray-700"></div>
+        </div>
+
+        <div id="content-extract" class="tab-content">
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">1. Input File</label>
+                    <input id="extract-input-file" type="file" class="w-full text-sm text-gray-500 file:mr-4">
+                    <p class="text-xs text-gray-500 mt-1">The text file containing the hidden message.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">2. Options</label>
+                    <div class="space-y-3">
+                         <div>
+                            <label for="extract-password" class="block text-sm text-gray-800">Password (if any)</label>
+                            <input id="extract-password" type="password" class="w-full p-2 mt-1 border border-gray-300 rounded-lg text-sm" placeholder="Enter password for decryption">
+                        </div>
+                        <div class="flex items-center">
+                            <input id="extract-compress" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="extract-compress" class="ml-2 block text-sm text-gray-800">Use Decompression (-C)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-200 pt-6">
+                    <button id="extract-button" class="w-full bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        Extract Message
+                    </button>
+                </div>
+
+                <div id="extract-status" class="mt-6 text-sm text-gray-700"></div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Extracted Message:</label>
+                    <textarea id="extract-output" rows="8" class="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50" readonly placeholder="Extracted message will appear here..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-calculate" class="tab-content">
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">1. Text File</label>
+                    <input id="calc-input-file" type="file" class="w-full text-sm text-gray-500 file:mr-4">
+                </div>
+                <div>
+                    <label for="calc-line-length" class="block text-sm text-gray-800">Max Line Length (-l)</label>
+                    <input id="calc-line-length" type="number" value="80" min="8" class="w-24 p-2 mt-1 border border-gray-300 rounded-lg text-sm">
+                </div>
+                <div class="border-t border-gray-200 pt-6">
+                    <button id="calc-button" class="w-full bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        Calculate Available Space
+                    </button>
+                </div>
+                <div id="calc-status" class="mt-6 text-sm text-gray-700"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center mt-8 text-sm text-gray-500">
+        Ported from Matthew Kwan's original code.
+    </footer>
+
+    <script>
+        // --- Global State & UI ---
+        let lineLength = 80;
+        let compressFlag = false;
+
+        function showTab(tabName) {
+            ['conceal', 'extract', 'calculate'].forEach(id => {
+                document.getElementById('content-' + id).classList.remove('active');
+                document.getElementById('tab-' + id).classList.remove('active');
+            });
+            document.getElementById('content-' + tabName).classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        document.getElementById('conceal-message-source').addEventListener('change', (e) => {
+            const isText = e.target.value === 'text';
+            document.getElementById('conceal-text-input-group').style.display = isText ? 'block' : 'none';
+            document.getElementById('conceal-file-input-group').style.display = isText ? 'none' : 'block';
+        });
+
+        // --- File & ArrayBuffer Helpers ---
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(file);
+            });
+        }
+
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // --- Huffman Codes (from huffcode.h) ---
+        const HUFFMAN_CODES = [
+            "010011101110011001000", "010011101110011001001", "010011101110011001010", "010011101110011001011",
+            "010011101110011001100", "010011101110011001101", "010011101110011001110", "010011101110011001111",
+            "101100010101", "0100100", "101101", "010011101110011010000", "0100111011100111",
+            "010011101110011010001", "010011101110011010010", "010011101110011010011", "010011101110011010100",
+            "010011101110011010101", "010011101110011010110", "010011101110011010111", "010011101110011011000",
+            "010011101110011011001", "010011101110011011010", "010011101110011011011", "010011101110011011100",
+            "010011101110011011101", "010011101110011011110", "010011101110001", "010011101110011011111",
+            "01001110111000000000", "01001110111000000001", "01001110111000000010", "111", "0100101000",
+            "101100100", "10111111111", "101111010010", "1011000101000", "0010100010101", "00101011",
+            "101111110", "00100011", "010010101", "101111010011", "1010110", "10111110", "101000",
+            "101111001", "0010000", "01001011", "101100101", "001010101", "001010011", "1011110111",
+            "1011001100", "0100101001", "1010011001", "001010000", "101111000", "10111111110",
+            "01001110110", "10100101010", "10111101000", "1010010100", "0010100011", "01001111",
+            "1011110110", "101100011", "101001101", "00100010", "001010010", "1011000000",
+            "1011001101", "0111000", "10110000011", "10110001011", "001010100", "101100111",
+            "101001011", "101100001", "010011100", "1010011110001", "101001110", "10100100",
+            "10101110", "1011110101", "10100111101", "1011000100", "10110000010", "0100111010",
+            "010011101111", "101001111001", "001010001011", "101001010111", "1011000101001",
+            "10111111100", "00101000100", "0101", "001001", "110110", "01000", "1100", "101010",
+            "011101", "10001", "0011", "1010011111", "0100110", "01111", "101110", "0001", "0110",
+            "100001", "10111111101", "11010", "0000", "1001", "110111", "0111001", "001011",
+            "10101111", "100000", "1010011000", "1010011110000", "101001010110", "0100111011101",
+            "0010100010100", "01001110111000000011", "010011101110000001000", "010011101110000001001",
+            "010011101110000001010", "010011101110000001011", "010011101110000001100",
+            "010011101110000001101", "010011101110000001110", "010011101110000001111",
+            "010011101110000010000", "010011101110000010001", "010011101110000010010",
+            "010011101110000010011", "010011101110000010100", "010011101110000010101",
+            "010011101110000010110", "010011101110000010111", "010011101110000011000",
+            "010011101110000011001", "010011101110000011010", "010011101110000011011",
+            "010011101110000011100", "010011101110000011101", "010011101110000011110",
+            "010011101110000011111", "010011101110000100000", "010011101110000100001",
+            "010011101110000100010", "010011101110000100011", "010011101110000100100",
+            "010011101110000100101", "010011101110000100110", "010011101110000100111",
+            "010011101110000101000", "010011101110000101001", "010011101110000101010",
+            "010011101110000101011", "010011101110000101100", "010011101110000101101",
+            "010011101110000101110", "010011101110000101111", "010011101110000110000",
+            "010011101110000110001", "010011101110000110010", "010011101110000110011",
+            "010011101110000110100", "010011101110000110101", "010011101110000110110",
+            "010011101110000110111", "010011101110000111000", "010011101110000111001",
+            "010011101110000111010", "010011101110000111011", "010011101110000111100",
+            "010011101110000111101", "010011101110000111110", "010011101110000111111",
+            "010011101110010000000", "010011101110010000001", "010011101110010000010",
+            "010011101110010000011", "010011101110010000100", "010011101110010000101",
+            "010011101110010000110", "010011101110010000111", "010011101110010001000",
+            "010011101110010001001", "010011101110010001010", "010011101110010001011",
+            "010011101110010001100", "010011101110010001101", "010011101110010001110",
+            "010011101110010001111", "010011101110010010000", "010011101110010010001",
+            "010011101110010010010", "010011101110010010011", "010011101110010010100",
+            "Image of a binary code tree representing Huffman coding",
+            "010011101110010010101", "010011101110010010110", "010011101110010010111",
+            "010011101110010011000", "010011101110010011001", "010011101110010011010",
+            "010011101110010011011", "010011101110010011100", "010011101110010011101",
+            "010011101110010011110", "010011101110010011111", "010011101110010100000",
+            "010011101110010100001", "010011101110010100010", "010011101110010100011",
+            "010011101110010100100", "010011101110010100101", "010011101110010100110",
+            "010011101110010100111", "010011101110010101000", "010011101110010101001",
+            "010011101110010101010", "010011101110010101011", "010011101110010101100",
+            "010011101110010101101", "010011101110010101110", "010011101110010101111",
+            "010011101110010110000", "010011101110010110001", "010011101110010110010",
+            "010011101110010110011", "010011101110010110100", "010011101110010110101",
+            "010011101110010110110", "010011101110010110111", "010011101110010111000",
+            "010011101110010111001", "010011101110010111010", "010011101110010111011",
+            "010011101110010111100", "010011101110010111101", "010011101110010111110",
+            "010011101110010111111", "010011101110011000000", "010011101110011000001",
+            "010011101110011000010", "010011101110011000011", "010011101110011000100",
+            "010011101110011000101", "010011101110011000110", "010011101110011000111"
+        ];
+        
+        // Build reverse map for decompression
+        const HUFFMAN_REV_MAP = new Map();
+        HUFFMAN_CODES.forEach((code, byteVal) => {
+            // Fix for the broken string in the list
+            if (code.startsWith('Image of')) {
+                code = "010011101110010010100";
+            }
+            HUFFMAN_REV_MAP.set(code, byteVal);
+        });
+
+        // --- Core Logic ---
+
+        // Helper to get next tab position
+        const tabpos = (n) => (n + 8) & ~7;
+
+        // Helper to strip trailing whitespace from a line
+        const wsgets = (line) => {
+            return line.replace(/[\s\r\n\t]+$/, '');
+        };
+        
+        // --- Space Calculation (from encode.c) ---
+        function calculateSpace(coverText, lineLen) {
+            const lines = coverText.split(/\r\n|\r|\n/);
+            let n_lo = 0;
+            let n_hi = 0;
+
+            for (const line of lines) {
+                const buf = wsgets(line);
+                let len = 0;
+                // Calculate visual length, accounting for tabs
+                for (let i = 0; i < buf.length; i++) {
+                    if (buf[i] === '\t') {
+                        len = tabpos(len);
+                    } else {
+                        len++;
+                    }
+                }
+
+                if (len > lineLen - 2) continue;
+                if (Math.floor(len / 8) === Math.floor(lineLen / 8)) {
+                    n_hi += 3;
+                    continue;
+                }
+
+                if ((len & 7) > 0) {
+                    n_hi += 3;
+                    len = tabpos(len);
+                }
+                if ((lineLen & 7) > 0) {
+                    n_hi += 3;
+                }
+
+                const n = Math.floor((lineLen - len) / 8) * 3;
+                n_hi += n;
+                n_lo += n;
+            }
+
+            if (n_lo > 0) { // Allow for initial tab
+                n_lo--;
+                n_hi--;
+            }
+
+            if (n_lo === n_hi) {
+                return `File has storage capacity of ${n_lo} bits (${Math.floor(n_lo / 8)} bytes)`;
+            } else {
+                return `File has storage capacity of between ${n_lo} and ${n_hi} bits. Approximately ${Math.floor((n_lo + n_hi) / 16)} bytes.`;
+            }
+        }
+
+        // --- BitStream Class ---
+        // A helper to manage passing bits between modules
+        class BitStream {
+            constructor() {
+                this.bits = [];
+            }
+            write(bit) {
+                this.bits.push(bit);
+            }
+            read() {
+                return this.bits.shift();
+            }
+            isEmpty() {
+                return this.bits.length === 0;
+            }
+            writeString(s) {
+                for (let i = 0; i < s.length; i++) {
+                    this.write(s[i] === '1' ? 1 : 0);
+                }
+            }
+        }
+
+        // --- ICE Encryption Library (Port of ice.c) ---
+        // Use a self-contained closure to mimic file scope
+        const ICE = (() => {
+            let ice_sbox = [];
+            let ice_sboxes_initialised = false;
+
+            const ice_smod = [
+                [333, 313, 505, 369],
+                [379, 375, 319, 391],
+                [361, 445, 451, 397],
+                [397, 425, 395, 505]
+            ];
+            const ice_sxor = [
+                [0x83, 0x85, 0x9b, 0xcd],
+                [0xcc, 0xa7, 0xad, 0x41],
+                [0x4b, 0x2e, 0xd4, 0x33],
+                [0xea, 0xcb, 0x2e, 0x04]
+            ];
+            const ice_pbox = [
+                0x00000001, 0x00000080, 0x00000400, 0x00002000,
+                0x00080000, 0x00200000, 0x01000000, 0x40000000,
+                0x00000008, 0x00000020, 0x00000100, 0x00004000,
+                0x00010000, 0x00800000, 0x04000000, 0x20000000,
+                0x00000004, 0x00000010, 0x00000200, 0x00008000,
+                0x00020000, 0x00400000, 0x08000000, 0x10000000,
+                0x00000002, 0x00000040, 0x00000800, 0x00001000,
+                0x00040000, 0x00100000, 0x02000000, 0x80000000
+            ];
+            const ice_keyrot = [0, 1, 2, 3, 2, 1, 3, 0, 1, 3, 2, 0, 3, 1, 0, 2];
+
+            // Emulate C's 32-bit unsigned integers
+            const u32 = (n) => n >>> 0;
+            const u32_add = (a, b) => u32(a + b);
+
+            // Galois Field multiplication
+            function gf_mult(a, b, m) {
+                let res = 0;
+                while (b) {
+                    if (b & 1) res ^= a;
+                    a <<= 1;
+                    b >>= 1;
+                    if (a >= 256) a ^= m;
+                }
+                return res;
+            }
+
+            // Galois Field exponentiation (b^7)
+            function gf_exp7(b, m) {
+                if (b == 0) return 0;
+                let x = gf_mult(b, b, m);
+                x = gf_mult(b, x, m);
+                x = gf_mult(x, x, m);
+                return gf_mult(b, x, m);
+            }
+
+            // 32-bit P-box permutation
+            function ice_perm32(x) {
+                let res = 0;
+                let pbox = ice_pbox;
+                let i = 0;
+                while (x) {
+                    if (x & 1) res |= pbox[i];
+                    i++;
+                    x >>>= 1;
+                }
+                return u32(res);
+            }
+
+            // Initialise S-boxes
+            function ice_sboxes_init() {
+                if (ice_sboxes_initialised) return;
+                for(let i=0; i<4; i++) ice_sbox[i] = new Uint32Array(1024);
+                
+                for (let i = 0; i < 1024; i++) {
+                    let col = (i >>> 1) & 0xff;
+                    let row = (i & 0x1) | ((i & 0x200) >>> 8);
+                    let x;
+
+                    x = gf_exp7(col ^ ice_sxor[0][row], ice_smod[0][row]) << 24;
+                    ice_sbox[0][i] = ice_perm32(x);
+
+                    x = gf_exp7(col ^ ice_sxor[1][row], ice_smod[1][row]) << 16;
+                    ice_sbox[1][i] = ice_perm32(x);
+
+                    x = gf_exp7(col ^ ice_sxor[2][row], ice_smod[2][row]) << 8;
+                    ice_sbox[2][i] = ice_perm32(x);
+
+                    x = gf_exp7(col ^ ice_sxor[3][row], ice_smod[3][row]);
+                    ice_sbox[3][i] = ice_perm32(x);
+                }
+                ice_sboxes_initialised = true;
+            }
+
+            // The ICE f function
+            function ice_f(p, sk) {
+                p = u32(p);
+                // Left half expansion
+                let tl = u32(((p >>> 16) & 0x3ff) | u32(u32(p >>> 14) | u32(p << 18)) & 0xffc00);
+                // Right half expansion
+                let tr = u32((p & 0x3ff) | u32(p << 2) & 0xffc00);
+
+                // Perform the salt permutation
+                let al = u32(sk[2] & (tl ^ tr));
+                let ar = u32(al ^ tr);
+                al = u32(al ^ tl);
+
+                al = u32(al ^ sk[0]); // XOR with subkey
+                ar = u32(ar ^ sk[1]);
+                
+                // S-box lookup and permutation
+                return u32(ice_sbox[0][al >>> 10] | ice_sbox[1][al & 0x3ff]
+                     | ice_sbox[2][ar >>> 10] | ice_sbox[3][ar & 0x3ff]);
+            }
+            
+            // Build key schedule
+            function ice_key_sched_build(ik, kb, n, keyrot) {
+                for (let i = 0; i < 8; i++) {
+                    let kr = keyrot[i];
+                    let isk = ik.keysched[n + i]; // this is [0,0,0]
+                    
+                    for (let j = 0; j < 15; j++) {
+                        let k;
+                        let curr_sk_idx = j % 3;
+                        
+                        for (k = 0; k < 4; k++) {
+                            let curr_kb_idx = (kr + k) & 3;
+                            let bit = kb[curr_kb_idx] & 1;
+                            
+                            isk[curr_sk_idx] = u32((isk[curr_sk_idx] << 1) | bit);
+                            kb[curr_kb_idx] = u32((kb[curr_kb_idx] >>> 1) | ((bit ^ 1) << 15));
+                        }
+                    }
+                }
+            }
+
+            // Public class and methods
+            class ICE_KEY {
+                constructor(n) {
+                    ice_sboxes_init();
+                    if (n < 1) {
+                        this.size = 1;
+                        this.rounds = 8;
+                    } else {
+                        this.size = n;
+                        this.rounds = n * 16;
+                    }
+                    this.keysched = [];
+                    for(let i=0; i<this.rounds; i++) {
+                        this.keysched.push(new Uint32Array(3)); // [0, 0, 0]
+                    }
+                }
+                
+                setKey(key) { // key is a Uint8Array
+                    if (this.rounds == 8) {
+                        let kb = new Uint16Array(4);
+                        for (let i = 0; i < 4; i++)
+                            kb[3 - i] = (key[i * 2] << 8) | key[i * 2 + 1];
+                        ice_key_sched_build(this, kb, 0, ice_keyrot);
+                        return;
+                    }
+                    
+                    for (let i = 0; i < this.size; i++) {
+                        let kb = new Uint16Array(4);
+                        for (let j = 0; j < 4; j++)
+                            kb[3 - j] = (key[i * 8 + j * 2] << 8) | key[i * 8 + j * 2 + 1];
+                        
+                        ice_key_sched_build(this, kb, i * 8, ice_keyrot);
+                        ice_key_sched_build(this, kb, this.rounds - 8 - i * 8, ice_keyrot.slice(8));
+                    }
+                }
+                
+                encrypt(ptext, ctext) { // Uint8Arrays
+                    let ptextView = new DataView(ptext.buffer, ptext.byteOffset);
+                    let l = u32(ptextView.getUint32(0, false));
+                    let r = u32(ptextView.getUint32(4, false));
+
+                    for (let i = 0; i < this.rounds; i += 2) {
+                        l = u32(l ^ ice_f(r, this.keysched[i]));
+                        r = u32(r ^ ice_f(l, this.keysched[i + 1]));
+                    }
+                    
+                    let ctextView = new DataView(ctext.buffer, ctext.byteOffset);
+                    ctextView.setUint32(0, r, false);
+                    ctextView.setUint32(4, l, false);
+                }
+
+                decrypt(ctext, ptext) { // Uint8Arrays
+                     let ctextView = new DataView(ctext.buffer, ctext.byteOffset);
+                    let l = u32(ctextView.getUint32(0, false));
+                    let r = u32(ctextView.getUint32(4, false));
+
+                    for (let i = this.rounds - 1; i > 0; i -= 2) {
+                        l = u32(l ^ ice_f(r, this.keysched[i]));
+                        r = u32(r ^ ice_f(l, this.keysched[i - 1]));
+                    }
+                    
+                    let ptextView = new DataView(ptext.buffer, ptext.byteOffset);
+                    ptextView.setUint32(0, r, false);
+                    ptextView.setUint32(4, l, false);
+                }
+            }
+            
+            return { ICE_KEY };
+        })();
+        
+        // --- Global Encryption State (from encrypt.c) ---
+        let ice_key = null;
+        let encrypt_iv_block = null;
+
+        // Build ICE key from password
+        function password_set(passwd) {
+            let level = Math.floor((passwd.length * 7 + 63) / 64);
+            if (level === 0) level = 1;
+            if (level > 128) level = 128;
+            
+            ice_key = new ICE.ICE_KEY(level);
+            
+            let buf = new Uint8Array(1024); // Zero-filled
+            let i = 0;
+            let passwd_idx = 0;
+            
+            while(passwd_idx < passwd.length) {
+                let c = passwd.charCodeAt(passwd_idx) & 0x7f;
+                let idx = Math.floor(i / 8);
+                let bit = i & 7;
+
+                if (bit == 0) {
+                    buf[idx] = (c << 1);
+                } else if (bit == 1) {
+                    buf[idx] |= c;
+                } else {
+                    buf[idx] |= (c >>> (bit - 1));
+                    buf[idx + 1] = (c << (9 - bit));
+                }
+                
+                i += 7;
+                passwd_idx++;
+                if (i > 8184) break; // 128 * 64
+            }
+            
+            ice_key.setKey(buf);
+            
+            // Set the IV by encrypting the key with itself
+            encrypt_iv_block = new Uint8Array(8);
+            ice_key.encrypt(buf.subarray(0, 8), encrypt_iv_block);
+        }
+        
+        // --- 1-bit CFB Encryption (from encrypt.c) ---
+        class Encryptor {
+            constructor(downstream, key, iv) {
+                this.downstream = downstream;
+                this.ice_key = key;
+                this.iv_block = new Uint8Array(iv); // Copy IV
+                this.cipher_block = new Uint8Array(8);
+            }
+            
+            write(bit) {
+                if (!this.ice_key) {
+                    this.downstream.write(bit);
+                    return;
+                }
+                
+                this.ice_key.encrypt(this.iv_block, this.cipher_block);
+                let outBit = bit;
+                if ((this.cipher_block[0] & 128) != 0) {
+                    outBit = bit ? 0 : 1;
+                }
+                
+                // Rotate the IV block one bit left
+                for (let i = 0; i < 8; i++) {
+                    this.iv_block[i] <<= 1;
+                    if (i < 7 && (this.iv_block[i + 1] & 128) != 0) {
+                        this.iv_block[i] |= 1;
+                    }
+                }
+                // CORREÇÃO AQUI: Deve usar o bit de cifrotexto (outBit), não o bit de plaintext (bit)
+                this.iv_block[7] |= outBit; // Rotate in the *ciphertext* bit
+                
+                this.downstream.write(outBit);
+            }
+            
+            flush() {
+                // CFB doesn't need a flush, but the key is "destroyed"
+                // We let the main handler do that.
+                // FIX: Added return to pass the result from the downstream flush
+                return this.downstream.flush();
+            }
+        }
+        
+        class Decryptor {
+             constructor(downstream, key, iv) {
+                this.downstream = downstream;
+                this.ice_key = key;
+                this.iv_block = new Uint8Array(iv); // Copy IV
+                this.cipher_block = new Uint8Array(8);
+            }
+            
+            write(bit) { // bit here is the *ciphertext* bit
+                if (!this.ice_key) {
+                    this.downstream.write(bit);
+                    return;
+                }
+                
+                this.ice_key.encrypt(this.iv_block, this.cipher_block);
+                let nbit = bit; // nbit is the *plaintext* bit
+                if ((this.cipher_block[0] & 128) != 0) {
+                    nbit = bit ? 0 : 1;
+                }
+                
+                // Rotate the IV block one bit left
+                for (let i = 0; i < 8; i++) {
+                    this.iv_block[i] <<= 1;
+                    if (i < 7 && (this.iv_block[i + 1] & 128) != 0) {
+                        this.iv_block[i] |= 1;
+                    }
+                }
+                this.iv_block[7] |= bit; // Rotate in the *ciphertext* bit
+                
+                this.downstream.write(nbit);
+            }
+            
+            flush() {
+                // FIX: Added return
+                return this.downstream.flush();
+            }
+        }
+
+
+        // --- Compression (from compress.c) ---
+        class Compressor {
+            constructor(downstreamBitHandler) {
+                this.downstream = downstreamBitHandler;
+                this.bitCount = 0;
+                this.value = 0;
+                this.bitsIn = 0;
+                this.bitsOut = 0;
+            }
+
+            compressBit(bit) {
+                this.bitsIn++;
+                this.value = (this.value << 1) | bit;
+                
+                if (++this.bitCount === 8) {
+                    const code = HUFFMAN_CODES[this.value];
+                    if (!code) {
+                        throw new Error(`No Huffman code for byte value ${this.value}`);
+                    }
+                    for (let i = 0; i < code.length; i++) {
+                        const outBit = code[i] === '1' ? 1 : 0;
+                        this.downstream.write(outBit);
+                        this.bitsOut++;
+                    }
+                    this.value = 0;
+                    this.bitCount = 0;
+                }
+            }
+
+            flush() {
+                // The C code warns about residual bits, we'll just ignore them
+                // as it doesn't pad/flush the compressor.
+                let status = "";
+                if (this.bitsOut > 0) {
+                    const cpc = (this.bitsIn - this.bitsOut) / this.bitsIn * 100.0;
+                    if (cpc < 0) {
+                        status = `Compression enlarged data by ${(-cpc).toFixed(2)}% - recommend not using compression.`;
+                    } else {
+                        status = `Compressed by ${cpc.toFixed(2)}%.`;
+                    }
+                }
+                this.downstream.flush(); // Propagate flush
+                return status;
+            }
+        }
+        
+        class Decompressor {
+            constructor(downstreamBitHandler) {
+                this.downstream = downstreamBitHandler;
+                this.bitBuffer = "";
+            }
+            
+            write(bit) { // Renamed from uncompressBit for pipeline
+                this.bitBuffer += (bit ? '1' : '0');
+                
+                const byteVal = HUFFMAN_REV_MAP.get(this.bitBuffer);
+                if (byteVal !== undefined) {
+                    // Found a code, write the 8 bits
+                    for (let i = 0; i < 8; i++) {
+                        const b = (byteVal & (128 >> i)) !== 0 ? 1 : 0;
+                        this.downstream.write(b);
+                    }
+                    this.bitBuffer = "";
+                }
+                
+                if (this.bitBuffer.length > 24) { // Longest code is ~22 bits
+                    throw new Error("Huffman uncompress buffer overflow. Likely corrupt data or wrong settings.");
+                }
+            }
+            
+            flush() {
+                // C code warns on residual bits, we just finish.
+                // FIX: Added return
+                return this.downstream.flush(); // Propagate flush
+            }
+        }
+
+        // --- Outputter (for extraction) ---
+        class Outputter {
+            constructor() {
+                this.bitCount = 0;
+                this.value = 0;
+                this.bytes = [];
+            }
+            
+            write(bit) {
+                this.value = (this.value << 1) | bit;
+                if (++this.bitCount === 8) {
+                    this.bytes.push(this.value);
+                    this.value = 0;
+                    this.bitCount = 0;
+                }
+            }
+            
+            flush() {
+                // C code warns on residual bits
+            }
+            
+            getBytes() {
+                return new Uint8Array(this.bytes);
+            }
+        }
+
+        // --- Encoding (from encode.c) ---
+        class Encoder {
+            constructor(lineLen) {
+                this.lineLength = lineLen;
+                this.bitCount = 0;
+                this.value = 0;
+                this.buffer = "";
+                this.bufferLoaded = false;
+                this.bufferCol = 0;
+                this.firstTab = false;
+                this.needsTab = false;
+                this.bitsUsed = 0;
+                this.bitsAvailable = 0; // Simplified calculation
+                this.linesExtra = 0;
+                this.outputLines = [];
+            }
+
+            // Calculates visual column length
+            getLineCol(line) {
+                let col = 0;
+                for (let i = 0; i < line.length; i++) {
+                    col = (line[i] === '\t') ? tabpos(col) : col + 1;
+                }
+                return col;
+            }
+
+            loadBuffer(line) {
+                if (line === undefined) { // No more lines
+                    this.buffer = "";
+                    this.linesExtra++;
+                } else {
+                    this.buffer = wsgets(line);
+                }
+                this.bufferCol = this.getLineCol(this.buffer);
+                this.bufferLoaded = true;
+                this.needsTab = false;
+            }
+
+            appendWhitespace(nsp) {
+                let col = this.bufferCol;
+                if (this.needsTab) col = tabpos(col);
+                
+                col = (nsp === 0) ? tabpos(col) : col + nsp;
+
+                if (col >= this.lineLength) return false;
+
+                if (this.needsTab) {
+                    this.buffer += '\t';
+                    this.bufferCol = tabpos(this.bufferCol);
+                }
+
+                if (nsp === 0) {
+                    this.buffer += '\t';
+                    this.bufferCol = tabpos(this.bufferCol);
+                    this.needsTab = false;
+                } else {
+                    for (let i = 0; i < nsp; i++) {
+                        this.buffer += ' ';
+                        this.bufferCol++;
+                    }
+                    this.needsTab = true;
+                }
+                return true;
+            }
+
+            writeValue(val, lineIterator) {
+                if (!this.bufferLoaded) {
+                    this.loadBuffer(lineIterator.next().value);
+                }
+
+                if (!this.firstTab) {
+                    while (tabpos(this.bufferCol) >= this.lineLength) {
+                        this.outputLines.push(this.buffer);
+                        this.loadBuffer(lineIterator.next().value);
+                    }
+                    this.buffer += '\t';
+                    this.bufferCol = tabpos(this.bufferCol);
+                    this.firstTab = true;
+                }
+
+                // Reverse bit ordering
+                const nspc = ((val & 1) << 2) | (val & 2) | ((val & 4) >> 2);
+
+                while (!this.appendWhitespace(nspc)) {
+                    this.outputLines.push(this.buffer);
+                    this.loadBuffer(lineIterator.next().value);
+                }
+                
+                if (this.linesExtra === 0) {
+                    this.bitsAvailable += 3;
+                }
+            }
+
+            write(bit, lineIterator) {
+                this.value = (this.value << 1) | bit;
+                this.bitsUsed++;
+
+                if (++this.bitCount === 3) {
+                    this.writeValue(this.value, lineIterator);
+                    this.value = 0;
+                    this.bitCount = 0;
+                }
+            }
+
+            flush(lineIterator) {
+                if (this.bitCount > 0) {
+                    while (this.bitCount < 3) { // Pad to 3 bits
+                        this.value <<= 1;
+                        this.bitCount++;
+                    }
+                    this.writeValue(this.value, lineIterator);
+                }
+
+                // Flush remaining text
+                if (this.bufferLoaded) {
+                    this.outputLines.push(this.buffer);
+                    this.bufferLoaded = false;
+                }
+                
+                let line = lineIterator.next();
+                while (!line.done) {
+                    this.outputLines.push(line.value);
+                    line = lineIterator.next();
+                }
+
+                let status = "";
+                if (this.linesExtra > 0) {
+                    status = `Message exceeded available space. An extra ${this.linesExtra} lines were added.`;
+                } else {
+                    // This space calculation is simplified
+                    // status = `Message used ${this.bitsUsed} bits.`;
+                }
+                return { output: this.outputLines.join('\n'), status: status };
+            }
+        }
+
+        // --- Extraction (from encode.c) ---
+        function extractBits(inputText, downstreamBitHandler) {
+            const lines = inputText.split(/\r\n|\r|\n/);
+            let startTabFound = false;
+            
+            const decodeBits = (spc) => {
+                if (spc > 7) {
+                    throw new Error(`Illegal encoding of ${spc} spaces.`);
+                }
+                
+                // O Encoder faz: nspc = (c3 << 2) | (c2 << 1) | c1
+                // Nós precisamos extrair c1, c2, c3 e enviá-los *nessa ordem*.
+                
+                const c1 = (spc & 1) !== 0 ? 1 : 0;
+                const c2 = (spc & 2) !== 0 ? 1 : 0;
+                const c3 = (spc & 4) !== 0 ? 1 : 0;
+                
+                downstreamBitHandler.write(c1); // Envia c1
+                downstreamBitHandler.write(c2); // Envia c2
+                downstreamBitHandler.write(c3); // Envia c3
+            };
+
+            for (const line of lines) {
+                let last_ws = -1;
+                for (let i = 0; i < line.length; i++) {
+                    if (line[i] !== ' ' && line[i] !== '\t') {
+                        last_ws = -1;
+                    } else if (last_ws === -1) {
+                        last_ws = i;
+                    }
+                }
+
+                if (last_ws === -1) continue;
+
+                const ws_string = line.substring(last_ws);
+                
+                if (!startTabFound && ws_string[0] === ' ') continue;
+
+                if (!startTabFound && ws_string[0] === '\t') {
+                    startTabFound = true;
+                    if (ws_string.length === 1) continue;
+                    // Start from char after tab
+                    let spc = 0;
+                    for (let i = 1; i < ws_string.length; i++) {
+                        if (ws_string[i] === ' ') {
+                            spc++;
+                        } else if (ws_string[i] === '\t') {
+                            decodeBits(spc);
+                            spc = 0;
+                        }
+                    }
+                    if (spc > 0) decodeBits(spc);
+                    
+                } else if (startTabFound) {
+                    let spc = 0;
+                    for (let i = 0; i < ws_string.length; i++) {
+                        if (ws_string[i] === ' ') {
+                            spc++;
+                        } else if (ws_string[i] === '\t') {
+                            decodeBits(spc);
+                            spc = 0;
+                        }
+                    }
+                    if (spc > 0) decodeBits(spc);
+                }
+            }
+        }
+        
+        // --- Main Conceal Logic ---
+        document.getElementById('conceal-button').addEventListener('click', async () => {
+            // Reset global encryption state
+            ice_key = null;
+            encrypt_iv_block = null;
+            
+            try {
+                const coverFile = document.getElementById('conceal-cover-file').files[0];
+                const messageSource = document.getElementById('conceal-message-source').value;
+                const lineLen = parseInt(document.getElementById('conceal-line-length').value, 10);
+                const doCompress = document.getElementById('conceal-compress').checked;
+                const password = document.getElementById('conceal-password').value;
+                const statusEl = document.getElementById('conceal-status');
+                const downloadEl = document.getElementById('conceal-download');
+
+                if (!coverFile) throw new Error("Please select a Cover Text File.");
+                if (isNaN(lineLen) || lineLen < 8) throw new Error("Line length must be at least 8.");
+
+                statusEl.textContent = "Processing...";
+                downloadEl.classList.add('hidden');
+                
+                // --- Setup password ---
+                if (password) {
+                    password_set(password);
+                }
+                
+                // --- Get message bytes ---
+                let messageBytes;
+                if (messageSource === 'text') {
+                    const messageText = document.getElementById('conceal-message-text').value;
+                    messageBytes = new TextEncoder().encode(messageText);
+                } else {
+                    const messageFile = document.getElementById('conceal-message-file').files[0];
+                    if (!messageFile) throw new Error("Please select a Message File.");
+                    const buffer = await readFileAsArrayBuffer(messageFile);
+                    messageBytes = new Uint8Array(buffer);
+                }
+                
+                const coverText = await readFileAsText(coverFile);
+                const lineIterator = coverText.split(/\r\n|\r|\n/)[Symbol.iterator]();
+                
+                // --- Build the processing pipeline ---
+                // Final stage
+                const encoder = new Encoder(lineLen);
+                
+                // Build chain backwards
+                let pipeline = {
+                    write: (bit) => encoder.write(bit, lineIterator),
+                    flush: () => encoder.flush(lineIterator)
+                };
+                
+                if (password) {
+                    pipeline = new Encryptor(pipeline, ice_key, encrypt_iv_block);
+                }
+                
+                let compressor = null;
+                if (doCompress) {
+                    compressor = new Compressor(pipeline);
+                }
+                
+                // --- Feed the message into the pipeline ---
+                for (const byte of messageBytes) {
+                    for (let i = 0; i < 8; i++) {
+                        const bit = (byte & (128 >> i)) !== 0 ? 1 : 0;
+                        if (doCompress) {
+                            compressor.compressBit(bit);
+                        } else {
+                            pipeline.write(bit);
+                        }
+                    }
+                }
+                
+                // --- Flush the pipelines ---
+                let compressStatus = "";
+                let encodeResult;
+                
+                if (doCompress) {
+                    compressStatus = compressor.flush();
+                    // flush propagates, so we just need the encoder's result
+                    encodeResult = { output: encoder.outputLines.join('\n'), status: encoder.status };
+                } else {
+                    encodeResult = pipeline.flush();
+                }
+                
+                const { output, status: encodeStatus } = encodeResult;
+                
+                // --- Show result ---
+                const blob = new Blob([output], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                downloadEl.href = url;
+                downloadEl.download = 'snowed.txt';
+                downloadEl.classList.remove('hidden');
+                
+                statusEl.innerHTML = `Concealment successful.<br>${compressStatus}<br>${encodeStatus}`;
+
+            } catch (e) {
+                document.getElementById('conceal-status').textContent = `Error: ${e.message}`;
+                console.error(e);
+            }
+            
+            // Clear sensitive info
+            ice_key = null;
+            encrypt_iv_block = null;
+        });
+        
+        // --- Main Extract Logic ---
+        document.getElementById('extract-button').addEventListener('click', async () => {
+            // Reset global encryption state
+            ice_key = null;
+            encrypt_iv_block = null;
+            
+            try {
+                const inputFile = document.getElementById('extract-input-file').files[0];
+                const doCompress = document.getElementById('extract-compress').checked;
+                const password = document.getElementById('extract-password').value;
+                const statusEl = document.getElementById('extract-status');
+                const outputEl = document.getElementById('extract-output');
+
+                if (!inputFile) throw new Error("Please select an Input File.");
+                
+                statusEl.textContent = "Processing...";
+                outputEl.value = "";
+                
+                // --- Setup password ---
+                if (password) {
+                    password_set(password);
+                }
+                
+                const inputText = await readFileAsText(inputFile);
+                
+                // --- Build the processing pipeline ---
+                // Final stage
+                const outputter = new Outputter();
+                
+                // Build chain backwards
+                let pipeline = outputter;
+                
+                if (doCompress) {
+                    pipeline = new Decompressor(pipeline);
+                }
+                
+                if (password) {
+                    pipeline = new Decryptor(pipeline, ice_key, encrypt_iv_block);
+                }
+                
+                // --- Start the extraction pipeline ---
+                const bitHandler = {
+                    write: (bit) => pipeline.write(bit)
+                };
+                extractBits(inputText, bitHandler);
+                
+                // --- Flush pipelines ---
+                pipeline.flush();
+                
+                const outputBytes = outputter.getBytes();
+                // Try to decode as UTF-8. If it fails, data is likely binary or wrong password.
+                let outputText;
+                try {
+                     outputText = new TextDecoder('utf-8', { fatal: true }).decode(outputBytes);
+                } catch (decodeError) {
+                    statusEl.textContent = "Extraction complete, but message is not valid UTF-8. It may be a binary file, or the password was incorrect.";
+                    // Fallback: display as hex
+                    outputText = Array.from(outputBytes, byte => byte.toString(16).padStart(2, '0')).join(' ');
+                }
+                
+                outputEl.value = outputText;
+                if (!statusEl.textContent.includes('UTF-8')) {
+                    statusEl.textContent = "Extraction complete.";
+                }
+                
+            } catch (e) {
+                statusEl.textContent = `Error: ${e.message}`;
+                console.error(e);
+            }
+            
+            // Clear sensitive info
+            ice_key = null;
+            encrypt_iv_block = null;
+        });
+
+        // --- Main Calculate Logic ---
+        document.getElementById('calc-button').addEventListener('click', async () => {
+            try {
+                const inputFile = document.getElementById('calc-input-file').files[0];
+                const lineLen = parseInt(document.getElementById('calc-line-length').value, 10);
+                const statusEl = document.getElementById('calc-status');
+
+                if (!inputFile) throw new Error("Please select a Text File.");
+                if (isNaN(lineLen) || lineLen < 8) throw new Error("Line length must be at least 8.");
+
+                statusEl.textContent = "Calculating...";
+                const coverText = await readFileAsText(inputFile);
+                const result = calculateSpace(coverText, lineLen);
+                statusEl.textContent = result;
+            } catch (e) {
+                document.getElementById('calc-status').textContent = `Error: ${e.message}`;
+            }
+        });
+
+    </script>
+</body>
+</html>
