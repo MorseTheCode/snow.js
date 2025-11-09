@@ -140,6 +140,10 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Extracted Message:</label>
                     <textarea id="extract-output" rows="8" class="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50" readonly placeholder="Extracted message will appear here..."></textarea>
+                    <!-- ADICIONADO: Botão de download para arquivos binários -->
+                    <a id="extract-download" class="hidden block w-full bg-green-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-green-700 transition-colors text-center mt-4">
+                        Download Extracted File
+                    </a>
                 </div>
             </div>
         </div>
@@ -630,8 +634,7 @@
             
             write(bit) {
                 if (!this.ice_key) {
-                    this.downstream.write(bit);
-                    return;
+                    return this.downstream.write(bit); // PASSANDO O RETORNO
                 }
                 
                 this.ice_key.encrypt(this.iv_block, this.cipher_block);
@@ -690,7 +693,7 @@
                 }
                 this.iv_block[7] |= bit; // Rotate in the *ciphertext* bit
                 
-                this.downstream.write(nbit);
+                return this.downstream.write(nbit); // PASSANDO O RETORNO
             }
             
             flush() {
@@ -758,7 +761,7 @@
             }
             
             write(bit) { // Renamed from uncompressBit for pipeline
-                if (this.stopped) return; // Se paramos, ignoramos novos bits
+                if (this.stopped) return false; // Se paramos, ignoramos novos bits E AVISAMOS
 
                 this.bitBuffer += (bit ? '1' : '0');
                 
@@ -771,22 +774,27 @@
                         // É o marcador End-of-Stream (EOS)
                         this.stopped = true;
                         this.bitBuffer = "";
-                        return; // Para de processar
+                        return false; // Para de processar E AVISA
                     }
 
                     // É um byte de dados normal (0-255)
                     for (let i = 0; i < 8; i++) {
                         const b = (byteVal & (128 >> i)) !== 0 ? 1 : 0;
-                        this.downstream.write(b);
+                        this.downstream.write(b); // Outputter.write sempre retorna true
                     }
                     this.bitBuffer = "";
 
                 } else if (this.bitBuffer.length > 24) { 
-                    // Buffer estourou, provavelmente lixo de padding
-                    // Paramos de processar para evitar dados corrompidos
-                    this.stopped = true;
+                    // CORREÇÃO:
+                    // O buffer estourou. Isso indica dados corrompidos ou senha/configuração errada.
+                    // Em vez de parar silenciosamente (o que trunca o arquivo),
+                    // disparamos um erro, que é o comportamento esperado.
+                    this.stopped = true; // Para de processar
                     this.bitBuffer = "";
+                    throw new Error("Decompression error: Invalid Huffman code. Check password or compression setting.");
                 }
+                
+                return true; // Continua processando
             }
             
             flush() {
@@ -814,6 +822,7 @@
                     this.value = 0;
                     this.bitCount = 0;
                 }
+                return true; // AVISA QUE CONTINUA
             }
             
             flush() {
@@ -944,14 +953,12 @@
                     this.bufferLoaded = false;
                 }
                 
-                // CORREÇÃO: Não copiar o resto do arquivo de cobertura.
-                // O programa original faz isso, mas nosso extrator
-                // não é robusto o suficiente para ignorar o lixo subsequente.
-                // let line = lineIterator.next();
-                // while (!line.done) {
-                //     this.outputLines.push(line.value);
-                //     line = lineIterator.next();
-                // }
+                // CORREÇÃO: Copiando o resto do arquivo de cobertura, como deve ser.
+                let line = lineIterator.next();
+                while (!line.done) {
+                    this.outputLines.push(line.value);
+                    line = lineIterator.next();
+                }
 
                 let status = "";
                 if (this.linesExtra > 0) {
@@ -974,65 +981,18 @@
                     throw new Error(`Illegal encoding of ${spc} spaces.`);
                 }
                 
-                // O Encoder faz: nspc = (c3 << 2) | (c2 << 1) | c1
-                // Nós precisamos extrair c1, c2, c3 e enviá-los *nessa ordem*.
-                
-                // CORREÇÃO: A ordem dos bits estava invertida na lógica original do Encoder.
-                // O Encoder faz: nspc = ((val & 1) << 2) | (val & 2) | ((val & 4) >> 2);
-                // val = c1 c2 c3 (bits de 0 a 2)
-                // val & 1 = c1
-                // val & 2 = c2
-                // val & 4 = c3
-                // nspc = (c1 << 2) | (c2) | (c3 >> 2) -- Não, (val & 2) é 0 ou 2. (val & 4) é 0 ou 4.
-                // c1 = val & 1 (bit 0)
-                // c2 = (val >> 1) & 1 (bit 1)
-                // c3 = (val >> 2) & 1 (bit 2)
-                // nspc = (c1 << 2) | (c2 << 1) | c3
-                // Ex: val = 5 (101) -> c1=1, c2=0, c3=1
-                // nspc = (1 << 2) | (0 << 1) | 1 = 4 | 0 | 1 = 5
-                // Ex: val = 3 (011) -> c1=1, c2=1, c3=0
-                // nspc = (1 << 2) | (1 << 1) | 0 = 4 | 2 | 0 = 6
-                // A lógica original estava `(val & 1) << 2) | (val & 2) | ((val & 4) >> 2)`
-                // val=5 (101) -> nspc = (1<<2) | (0) | (4>>2) = 4 | 0 | 1 = 5. OK.
-                // val=3 (011) -> nspc = (1<<2) | (2) | (0>>2) = 4 | 2 | 0 = 6. OK.
-                // val=6 (110) -> nspc = (0<<2) | (2) | (4>>2) = 0 | 2 | 1 = 3. OK.
-                
-                // Então, para reverter nspc:
-                // nspc = (c1*4) | (c2*2) | (c3)
-                // Não...
-                // nspc = (c1 << 2) | c2 | (c3 >> 2) -- onde c1, c2, c3 são 1,2,4
-                // nspc = (bit0 << 2) | (bit1*2) | (bit2*4 >> 2)
-                // nspc = (bit0*4) | (bit1*2) | (bit2)
-                
-                // Ah! `val` são os 3 bits. `val = (c1 << 2) | (c2 << 1) | c3`. Não, `val = (c3 << 2) | (c2 << 1) | c1`
-                // O encoder recebe bit a bit: c1, depois c2, depois c3.
-                // this.value = (this.value << 1) | bit;
-                // 1. value = c1
-                // 2. value = (c1 << 1) | c2
-                // 3. value = ((c1 << 1) | c2) << 1 | c3 = (c1 << 2) | (c2 << 1) | c3
-                // Este `value` (vamos chamar de `val`) é usado:
-                // nspc = ((val & 1) << 2) | (val & 2) | ((val & 4) >> 2);
-                // val & 1 = c3
-                // val & 2 = c2 << 1 (ou 0)
-                // val & 4 = c1 << 2 (ou 0)
-                // nspc = (c3 << 2) | (c2 << 1) | c1
-                // Ex: bits são 1, 0, 1 (c1=1, c2=0, c3=1)
-                // val = (1<<2) | (0<<1) | 1 = 5 (101)
-                // nspc = ((5&1)<<2) | (5&2) | ((5&4)>>2) = (1<<2) | (0) | (4>>2) = 4 | 0 | 1 = 5
-                
-                // Para reverter nspc = 5:
-                // c1 = nspc & 1 = 5 & 1 = 1
-                // c2 = (nspc & 2) >> 1 = 0 >> 1 = 0
-                // c3 = (nspc & 4) >> 2 = 4 >> 2 = 1
-                // Bits são 1, 0, 1. Correto.
+                // ... (lógica de extração de c1, c2, c3) ...
                 
                 const c1 = (spc & 1);
                 const c2 = (spc & 2) >> 1;
                 const c3 = (spc & 4) >> 2;
                 
-                downstreamBitHandler.write(c1); // Envia c1
-                downstreamBitHandler.write(c2); // Envia c2
-                downstreamBitHandler.write(c3); // Envia c3
+                // VERIFICA O SINAL DE PARADA
+                if (!downstreamBitHandler.write(c1)) return false; // Envia c1
+                if (!downstreamBitHandler.write(c2)) return false; // Envia c2
+                if (!downstreamBitHandler.write(c3)) return false; // Envia c3
+                
+                return true; // AVISA QUE CONTINUA
             };
 
             for (const line of lines) {
@@ -1054,29 +1014,44 @@
                 if (!startTabFound && ws_string[0] === '\t') {
                     startTabFound = true;
                     if (ws_string.length === 1) continue;
-                    // Start from char after tab
+                    
+                    // CORREÇÃO: Adiciona flag de parada
                     let spc = 0;
+                    let keepProcessing = true;
                     for (let i = 1; i < ws_string.length; i++) {
                         if (ws_string[i] === ' ') {
                             spc++;
                         } else if (ws_string[i] === '\t') {
-                            decodeBits(spc);
+                            if (!decodeBits(spc)) { // Verifica o sinal
+                                keepProcessing = false;
+                                break;
+                            }
                             spc = 0;
                         }
                     }
-                    if (spc > 0) decodeBits(spc);
+                    if (keepProcessing && spc > 0) {
+                        if (!decodeBits(spc)) keepProcessing = false;
+                    }
+                    if (!keepProcessing) break; // Para o loop de linhas
                     
                 } else if (startTabFound) {
                     let spc = 0;
+                    let keepProcessing = true; // CORREÇÃO: Adiciona flag de parada
                     for (let i = 0; i < ws_string.length; i++) {
                         if (ws_string[i] === ' ') {
                             spc++;
                         } else if (ws_string[i] === '\t') {
-                            decodeBits(spc);
+                            if (!decodeBits(spc)) { // Verifica o sinal
+                                keepProcessing = false;
+                                break;
+                            }
                             spc = 0;
                         }
                     }
-                    if (spc > 0) decodeBits(spc);
+                    if (keepProcessing && spc > 0) {
+                        if (!decodeBits(spc)) keepProcessing = false;
+                    }
+                    if (!keepProcessing) break; // Para o loop de linhas
                 }
             }
         }
@@ -1219,11 +1194,13 @@
                 const password = document.getElementById('extract-password').value;
                 const statusEl = document.getElementById('extract-status');
                 const outputEl = document.getElementById('extract-output');
+                const downloadEl = document.getElementById('extract-download'); // Pegar o novo elemento
 
                 if (!inputFile) throw new Error("Please select an Input File.");
                 
                 statusEl.textContent = "Processing...";
                 outputEl.value = "";
+                downloadEl.classList.add('hidden'); // Esconder o botão de download
                 
                 // --- Setup password ---
                 if (password) {
@@ -1257,20 +1234,32 @@
                 pipeline.flush();
                 
                 const outputBytes = outputter.getBytes();
-                // Try to decode as UTF-8. If it fails, data is likely binary or wrong password.
+                
+                // --- CORREÇÃO: Lidar com arquivos binários na extração ---
+
+                // 1. Criar o link de download para os bytes brutos
+                const blob = new Blob([outputBytes], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                downloadEl.href = url;
+                downloadEl.download = 'extracted_file.txt'; // Nome genérico, pois não sabemos o original
+                downloadEl.classList.remove('hidden'); // Mostrar o botão de download
+
+                // 2. Tentar decodificar como texto apenas para o preview
                 let outputText;
                 try {
                      outputText = new TextDecoder('utf-8', { fatal: true }).decode(outputBytes);
+                     // Não mudar o status se já for um erro
+                     if (!statusEl.textContent.includes('UTF-8')) {
+                         statusEl.textContent = "Extraction complete. Text preview shown below.";
+                     }
                 } catch (decodeError) {
-                    statusEl.textContent = "Extraction complete, but message is not valid UTF-8. It may be a binary file, or the password was incorrect.";
-                    // Fallback: display as hex
-                    outputText = Array.from(outputBytes, byte => byte.toString(16).padStart(2, '0')).join(' ');
+                    statusEl.textContent = "Extraction complete. Message appears to be a binary file. Use the download button to save it.";
+                    outputText = `[Binary file content - ${outputBytes.length} bytes]`;
                 }
                 
                 outputEl.value = outputText;
-                if (!statusEl.textContent.includes('UTF-8')) {
-                    statusEl.textContent = "Extraction complete.";
-                }
+                
+                // --- Fim da Correção ---
                 
             } catch (e) {
                 statusEl.textContent = `Error: ${e.message}`;
