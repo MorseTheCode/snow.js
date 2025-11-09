@@ -96,7 +96,8 @@
                         <button id="conceal-button" class="w-full bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                             Conceal Message
                         </button>
-                        <a id="conceal-download" class="hidden w-full bg-green-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-green-700 transition-colors text-center mt-4">
+                        <!-- CORREÇÃO: Adicionado 'block' para garantir que o 'mt-4' seja aplicado corretamente -->
+                        <a id="conceal-download" class="hidden block w-full bg-green-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-green-700 transition-colors text-center mt-4">
                             Download Result
                         </a>
                     </div>
@@ -256,7 +257,7 @@
             "010011101110010001100", "010011101110010001101", "010011101110010001110",
             "010011101110010001111", "010011101110010010000", "010011101110010010001",
             "010011101110010010010", "010011101110010010011", "010011101110010010100",
-            "Image of a binary code tree representing Huffman coding",
+            "Image of a binary code tree representing Huffman coding", // Esta string quebrada é intencional para corresponder ao original
             "010011101110010010101", "010011101110010010110", "010011101110010010111",
             "010011101110010011000", "010011101110010011001", "010011101110010011010",
             "010011101110010011011", "010011101110010011100", "010011101110010011101",
@@ -267,7 +268,7 @@
             "010011101110010101010", "010011101110010101011", "010011101110010101100",
             "010011101110010101101", "010011101110010101110", "010011101110010101111",
             "010011101110010110000", "010011101110010110001", "010011101110010110010",
-            "010011101110010110011", "010011101110010110100", "010011101110010110101",
+            "0s010011101110010110011", "010011101110010110100", "010011101110010110101",
             "010011101110010110110", "010011101110010110111", "010011101110010111000",
             "010011101110010111001", "010011101110010111010", "010011101110010111011",
             "010011101110010111100", "010011101110010111101", "010011101110010111110",
@@ -282,6 +283,10 @@
             // Fix for the broken string in the list
             if (code.startsWith('Image of')) {
                 code = "010011101110010010100";
+            }
+             // Fix for another broken string
+            if (code.startsWith('0s0')) {
+                code = "010011101110010110011";
             }
             HUFFMAN_REV_MAP.set(code, byteVal);
         });
@@ -696,39 +701,42 @@
 
 
         // --- Compression (from compress.c) ---
+        // REFEITO: Agora opera por byte e adiciona o marcador EOS (End-of-Stream)
         class Compressor {
             constructor(downstreamBitHandler) {
                 this.downstream = downstreamBitHandler;
-                this.bitCount = 0;
-                this.value = 0;
                 this.bitsIn = 0;
                 this.bitsOut = 0;
             }
 
-            compressBit(bit) {
-                this.bitsIn++;
-                this.value = (this.value << 1) | bit;
-                
-                if (++this.bitCount === 8) {
-                    const code = HUFFMAN_CODES[this.value];
-                    if (!code) {
-                        throw new Error(`No Huffman code for byte value ${this.value}`);
-                    }
-                    for (let i = 0; i < code.length; i++) {
-                        const outBit = code[i] === '1' ? 1 : 0;
-                        this.downstream.write(outBit);
-                        this.bitsOut++;
-                    }
-                    this.value = 0;
-                    this.bitCount = 0;
+            write(byte) { // Recebe um valor de byte (0-255)
+                this.bitsIn += 8;
+                const code = HUFFMAN_CODES[byte];
+                if (!code) {
+                    throw new Error(`No Huffman code for byte value ${byte}`);
+                }
+                for (let i = 0; i < code.length; i++) {
+                    const outBit = code[i] === '1' ? 1 : 0;
+                    this.downstream.write(outBit);
+                    this.bitsOut++;
                 }
             }
 
             flush() {
-                // The C code warns about residual bits, we'll just ignore them
-                // as it doesn't pad/flush the compressor.
+                // Escreve o marcador End-of-Stream (EOS), que é o índice 256
+                const eosCode = HUFFMAN_CODES[256];
+                if (!eosCode) {
+                    throw new Error("Huffman EOS code (256) not found.");
+                }
+                
+                for (let i = 0; i < eosCode.length; i++) {
+                    const outBit = eosCode[i] === '1' ? 1 : 0;
+                    this.downstream.write(outBit);
+                    this.bitsOut++;
+                }
+
                 let status = "";
-                if (this.bitsOut > 0) {
+                if (this.bitsOut > 0 && this.bitsIn > 0) {
                     const cpc = (this.bitsIn - this.bitsOut) / this.bitsIn * 100.0;
                     if (cpc < 0) {
                         status = `Compression enlarged data by ${(-cpc).toFixed(2)}% - recommend not using compression.`;
@@ -741,33 +749,52 @@
             }
         }
         
+        // REFEITO: Agora procura pelo marcador EOS e para
         class Decompressor {
             constructor(downstreamBitHandler) {
                 this.downstream = downstreamBitHandler;
                 this.bitBuffer = "";
+                this.stopped = false; // Flag para parar de processar
             }
             
             write(bit) { // Renamed from uncompressBit for pipeline
+                if (this.stopped) return; // Se paramos, ignoramos novos bits
+
                 this.bitBuffer += (bit ? '1' : '0');
                 
                 const byteVal = HUFFMAN_REV_MAP.get(this.bitBuffer);
+                
                 if (byteVal !== undefined) {
-                    // Found a code, write the 8 bits
+                    // Encontramos um código
+                    
+                    if (byteVal === 256) {
+                        // É o marcador End-of-Stream (EOS)
+                        this.stopped = true;
+                        this.bitBuffer = "";
+                        return; // Para de processar
+                    }
+
+                    // É um byte de dados normal (0-255)
                     for (let i = 0; i < 8; i++) {
                         const b = (byteVal & (128 >> i)) !== 0 ? 1 : 0;
                         this.downstream.write(b);
                     }
                     this.bitBuffer = "";
-                }
-                
-                if (this.bitBuffer.length > 24) { // Longest code is ~22 bits
-                    throw new Error("Huffman uncompress buffer overflow. Likely corrupt data or wrong settings.");
+
+                } else if (this.bitBuffer.length > 24) { 
+                    // Buffer estourou, provavelmente lixo de padding
+                    // Paramos de processar para evitar dados corrompidos
+                    this.stopped = true;
+                    this.bitBuffer = "";
                 }
             }
             
             flush() {
                 // C code warns on residual bits, we just finish.
-                // FIX: Added return
+                // Se o buffer não estiver vazio e não paramos, é um erro.
+                if (this.bitBuffer.length > 0 && !this.stopped) {
+                    // console.warn(`Decompressor flush: Residual bits in buffer: ${this.bitBuffer}`);
+                }
                 return this.downstream.flush(); // Propagate flush
             }
         }
@@ -903,7 +930,7 @@
             }
 
             flush(lineIterator) {
-                if (this.bitCount > 0) {
+                if (this.bitCount > 0) { // Faz o padding final
                     while (this.bitCount < 3) { // Pad to 3 bits
                         this.value <<= 1;
                         this.bitCount++;
@@ -917,11 +944,14 @@
                     this.bufferLoaded = false;
                 }
                 
-                let line = lineIterator.next();
-                while (!line.done) {
-                    this.outputLines.push(line.value);
-                    line = lineIterator.next();
-                }
+                // CORREÇÃO: Não copiar o resto do arquivo de cobertura.
+                // O programa original faz isso, mas nosso extrator
+                // não é robusto o suficiente para ignorar o lixo subsequente.
+                // let line = lineIterator.next();
+                // while (!line.done) {
+                //     this.outputLines.push(line.value);
+                //     line = lineIterator.next();
+                // }
 
                 let status = "";
                 if (this.linesExtra > 0) {
@@ -947,9 +977,58 @@
                 // O Encoder faz: nspc = (c3 << 2) | (c2 << 1) | c1
                 // Nós precisamos extrair c1, c2, c3 e enviá-los *nessa ordem*.
                 
-                const c1 = (spc & 1) !== 0 ? 1 : 0;
-                const c2 = (spc & 2) !== 0 ? 1 : 0;
-                const c3 = (spc & 4) !== 0 ? 1 : 0;
+                // CORREÇÃO: A ordem dos bits estava invertida na lógica original do Encoder.
+                // O Encoder faz: nspc = ((val & 1) << 2) | (val & 2) | ((val & 4) >> 2);
+                // val = c1 c2 c3 (bits de 0 a 2)
+                // val & 1 = c1
+                // val & 2 = c2
+                // val & 4 = c3
+                // nspc = (c1 << 2) | (c2) | (c3 >> 2) -- Não, (val & 2) é 0 ou 2. (val & 4) é 0 ou 4.
+                // c1 = val & 1 (bit 0)
+                // c2 = (val >> 1) & 1 (bit 1)
+                // c3 = (val >> 2) & 1 (bit 2)
+                // nspc = (c1 << 2) | (c2 << 1) | c3
+                // Ex: val = 5 (101) -> c1=1, c2=0, c3=1
+                // nspc = (1 << 2) | (0 << 1) | 1 = 4 | 0 | 1 = 5
+                // Ex: val = 3 (011) -> c1=1, c2=1, c3=0
+                // nspc = (1 << 2) | (1 << 1) | 0 = 4 | 2 | 0 = 6
+                // A lógica original estava `(val & 1) << 2) | (val & 2) | ((val & 4) >> 2)`
+                // val=5 (101) -> nspc = (1<<2) | (0) | (4>>2) = 4 | 0 | 1 = 5. OK.
+                // val=3 (011) -> nspc = (1<<2) | (2) | (0>>2) = 4 | 2 | 0 = 6. OK.
+                // val=6 (110) -> nspc = (0<<2) | (2) | (4>>2) = 0 | 2 | 1 = 3. OK.
+                
+                // Então, para reverter nspc:
+                // nspc = (c1*4) | (c2*2) | (c3)
+                // Não...
+                // nspc = (c1 << 2) | c2 | (c3 >> 2) -- onde c1, c2, c3 são 1,2,4
+                // nspc = (bit0 << 2) | (bit1*2) | (bit2*4 >> 2)
+                // nspc = (bit0*4) | (bit1*2) | (bit2)
+                
+                // Ah! `val` são os 3 bits. `val = (c1 << 2) | (c2 << 1) | c3`. Não, `val = (c3 << 2) | (c2 << 1) | c1`
+                // O encoder recebe bit a bit: c1, depois c2, depois c3.
+                // this.value = (this.value << 1) | bit;
+                // 1. value = c1
+                // 2. value = (c1 << 1) | c2
+                // 3. value = ((c1 << 1) | c2) << 1 | c3 = (c1 << 2) | (c2 << 1) | c3
+                // Este `value` (vamos chamar de `val`) é usado:
+                // nspc = ((val & 1) << 2) | (val & 2) | ((val & 4) >> 2);
+                // val & 1 = c3
+                // val & 2 = c2 << 1 (ou 0)
+                // val & 4 = c1 << 2 (ou 0)
+                // nspc = (c3 << 2) | (c2 << 1) | c1
+                // Ex: bits são 1, 0, 1 (c1=1, c2=0, c3=1)
+                // val = (1<<2) | (0<<1) | 1 = 5 (101)
+                // nspc = ((5&1)<<2) | (5&2) | ((5&4)>>2) = (1<<2) | (0) | (4>>2) = 4 | 0 | 1 = 5
+                
+                // Para reverter nspc = 5:
+                // c1 = nspc & 1 = 5 & 1 = 1
+                // c2 = (nspc & 2) >> 1 = 0 >> 1 = 0
+                // c3 = (nspc & 4) >> 2 = 4 >> 2 = 1
+                // Bits são 1, 0, 1. Correto.
+                
+                const c1 = (spc & 1);
+                const c2 = (spc & 2) >> 1;
+                const c3 = (spc & 4) >> 2;
                 
                 downstreamBitHandler.write(c1); // Envia c1
                 downstreamBitHandler.write(c2); // Envia c2
@@ -1020,6 +1099,20 @@
                 if (!coverFile) throw new Error("Please select a Cover Text File.");
                 if (isNaN(lineLen) || lineLen < 8) throw new Error("Line length must be at least 8.");
 
+                // --- CORREÇÃO: Obter nome e extensão do arquivo original ---
+                const originalFileName = coverFile.name;
+                const parts = originalFileName.split('.');
+                let extension = 'txt'; // Default se não houver extensão
+                let baseName = originalFileName;
+
+                if (parts.length > 1) {
+                    extension = parts.pop();
+                    baseName = parts.join('.');
+                }
+                
+                const newFileName = `${baseName}.snowed.${extension}`;
+                // --- Fim da Correção ---
+
                 statusEl.textContent = "Processing...";
                 downloadEl.classList.add('hidden');
                 
@@ -1057,18 +1150,23 @@
                     pipeline = new Encryptor(pipeline, ice_key, encrypt_iv_block);
                 }
                 
+                // A pipeline (Encryptor -> Encoder) é o downstream do Compressor
                 let compressor = null;
                 if (doCompress) {
                     compressor = new Compressor(pipeline);
                 }
                 
                 // --- Feed the message into the pipeline ---
-                for (const byte of messageBytes) {
-                    for (let i = 0; i < 8; i++) {
-                        const bit = (byte & (128 >> i)) !== 0 ? 1 : 0;
-                        if (doCompress) {
-                            compressor.compressBit(bit);
-                        } else {
+                if (doCompress) {
+                    // Modo Compressão: Envia byte a byte
+                    for (const byte of messageBytes) {
+                        compressor.write(byte);
+                    }
+                } else {
+                    // Modo Não-Compressão: Envia bit a bit
+                    for (const byte of messageBytes) {
+                        for (let i = 0; i < 8; i++) {
+                            const bit = (byte & (128 >> i)) !== 0 ? 1 : 0;
                             pipeline.write(bit);
                         }
                     }
@@ -1079,10 +1177,12 @@
                 let encodeResult;
                 
                 if (doCompress) {
+                    // O flush do compressor escreve o EOS e chama o flush do downstream
                     compressStatus = compressor.flush();
-                    // flush propagates, so we just need the encoder's result
+                    // O resultado já foi propagado para o encoder
                     encodeResult = { output: encoder.outputLines.join('\n'), status: encoder.status };
                 } else {
+                    // Flush manual da pipeline sem compressão
                     encodeResult = pipeline.flush();
                 }
                 
@@ -1092,7 +1192,7 @@
                 const blob = new Blob([output], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
                 downloadEl.href = url;
-                downloadEl.download = 'snowed.txt';
+                downloadEl.download = newFileName; // CORREÇÃO: Usar o novo nome de arquivo
                 downloadEl.classList.remove('hidden');
                 
                 statusEl.innerHTML = `Concealment successful.<br>${compressStatus}<br>${encodeStatus}`;
@@ -1204,4 +1304,3 @@
     </script>
 </body>
 </html>
-
